@@ -22,6 +22,8 @@ struct ContentView: View {
     
     // Trackpad last translation cache to compute frame deltas
     @State private var lastDragTranslation: CGSize = .zero
+    @State private var lastMouseEventTime: Double = 0
+    @State private var accumulatedDelta: CGSize = .zero
     
     // Modifier states
     @State private var ctrlActive = false
@@ -177,26 +179,59 @@ struct ContentView: View {
                                         DragGesture(minimumDistance: 0)
                                             .onChanged { value in
                                                 if inputMode == "Trackpad" {
-                                                    let deltaX = (value.translation.width - lastDragTranslation.width) * 1.4
-                                                    let deltaY = (value.translation.height - lastDragTranslation.height) * 1.4
-                                                    webRTC.sendInput(event: ["type": "mouse_move_rel", "dx": deltaX, "dy": deltaY])
+                                                    let deltaX = value.translation.width - lastDragTranslation.width
+                                                    let deltaY = value.translation.height - lastDragTranslation.height
+                                                    
+                                                    accumulatedDelta.width += deltaX
+                                                    accumulatedDelta.height += deltaY
                                                     lastDragTranslation = value.translation
+                                                    
+                                                    let now = Date().timeIntervalSince1970
+                                                    if now - lastMouseEventTime >= 0.022 { // Rate-limit at ~45 FPS to prevent channel congestion
+                                                        webRTC.sendInput(event: [
+                                                            "type": "mouse_move_rel",
+                                                            "dx": accumulatedDelta.width * 1.4,
+                                                            "dy": accumulatedDelta.height * 1.4
+                                                        ])
+                                                        accumulatedDelta = .zero
+                                                        lastMouseEventTime = now
+                                                    }
                                                 } else {
-                                                    if let norm = getNormalizedCoords(location: value.location, viewSize: geo.size) {
-                                                        webRTC.sendInput(event: ["type": "mouse_move_abs", "x": norm.x, "y": norm.y])
+                                                    let now = Date().timeIntervalSince1970
+                                                    if now - lastMouseEventTime >= 0.022 {
+                                                        if let norm = getNormalizedCoords(location: value.location, viewSize: geo.size) {
+                                                            webRTC.sendInput(event: ["type": "mouse_move_abs", "x": norm.x, "y": norm.y])
+                                                        }
+                                                        lastMouseEventTime = now
                                                     }
                                                 }
                                             }
                                             .onEnded { value in
                                                 if inputMode == "Trackpad" {
+                                                    // Transmit any remaining motion deltas instantly
+                                                    let deltaX = value.translation.width - lastDragTranslation.width
+                                                    let deltaY = value.translation.height - lastDragTranslation.height
+                                                    let finalDx = (accumulatedDelta.width + deltaX) * 1.4
+                                                    let finalDy = (accumulatedDelta.height + deltaY) * 1.4
+                                                    
+                                                    if abs(finalDx) > 0 || abs(finalDy) > 0 {
+                                                        webRTC.sendInput(event: ["type": "mouse_move_rel", "dx": finalDx, "dy": finalDy])
+                                                    }
+                                                    
                                                     lastDragTranslation = .zero
+                                                    accumulatedDelta = .zero
                                                 } else {
                                                     if let norm = getNormalizedCoords(location: value.location, viewSize: geo.size) {
                                                         webRTC.sendInput(event: ["type": "mouse_move_abs", "x": norm.x, "y": norm.y])
                                                     }
-                                                    webRTC.sendInput(event: ["type": "mouse_button", "button": "left", "state": "down"])
-                                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) {
-                                                        webRTC.sendInput(event: ["type": "mouse_button", "button": "left", "state": "up"])
+                                                    
+                                                    // Tap-to-click validation (only clicks if the drag was very small, preventing lift-off clicks)
+                                                    let distance = sqrt(value.translation.width * value.translation.width + value.translation.height * value.translation.height)
+                                                    if distance < 8 {
+                                                        webRTC.sendInput(event: ["type": "mouse_button", "button": "left", "state": "down"])
+                                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) {
+                                                            webRTC.sendInput(event: ["type": "mouse_button", "button": "left", "state": "up"])
+                                                        }
                                                     }
                                                 }
                                             }
