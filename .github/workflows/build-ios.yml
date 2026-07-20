@@ -11,12 +11,18 @@ jobs:
   build-ios:
     name: Build iOS SwiftUI Client
     runs-on: macos-14
-    env:
-      DEVELOPER_DIR: /Applications/Xcode_15.4.app/Contents/Developer
 
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
+
+      - name: Select Latest Xcode Version
+        run: |
+          echo "Available Xcode versions:"
+          ls -d /Applications/Xcode*.app
+          LATEST_XCODE=$(ls -d /Applications/Xcode*.app | sort -V | tail -n 1)
+          echo "Selecting latest Xcode: $LATEST_XCODE"
+          echo "DEVELOPER_DIR=$LATEST_XCODE/Contents/Developer" >> $GITHUB_ENV
 
       - name: Install XcodeGen
         run: brew install xcodegen
