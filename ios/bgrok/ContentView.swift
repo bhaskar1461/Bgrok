@@ -176,7 +176,7 @@ struct ContentView: View {
                                 sendWakeRequest()
                             }) {
                                 Image(systemName: "power")
-                                    .fontWeight(.bold)
+                                    .font(.system(size: 20, weight: .bold))
                                     .foregroundColor(.white)
                                     .frame(width: 44, height: 44)
                                     .background(Color.red.opacity(0.85))
