@@ -45,3 +45,8 @@ Thumbs.db
 *.njsproj
 *.sln
 *.sw?
+
+# Large installer binaries
+/*.exe
+/bgrok-ios-app/
+/Microsoft.Services.Store.winmd

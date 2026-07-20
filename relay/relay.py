@@ -23,6 +23,8 @@ agents = {}
 clients = {}
 # Track client_id -> agent_id mappings
 client_to_agent = {}
+# Map agent_id -> (WebSocket, mac_address)
+beacons = {}
 
 @app.websocket("/ws")
 async def websocket_endpoint(websocket: WebSocket):
@@ -57,6 +59,18 @@ async def websocket_endpoint(websocket: WebSocket):
                 logger.info(f"Agent '{agent_id}' registered successfully.")
                 await websocket.send_json({"type": "registered", "role": "agent"})
                 
+            # --- Beacon Registration ---
+            elif msg_type == "register_beacon":
+                agent_id = data.get("agent_id")
+                mac_address = data.get("mac_address")
+                if not agent_id or not mac_address:
+                    await websocket.send_json({"type": "error", "message": "Missing agent_id or mac_address"})
+                    continue
+                role = "beacon"
+                beacons[agent_id] = (websocket, mac_address)
+                logger.info(f"Beacon for Agent '{agent_id}' (MAC: {mac_address}) registered successfully.")
+                await websocket.send_json({"type": "registered", "role": "beacon"})
+
             # --- Client Registration ---
             elif msg_type == "register_client":
                 client_id = data.get("client_id")
@@ -152,10 +166,32 @@ async def websocket_endpoint(websocket: WebSocket):
             if client_id in client_to_agent:
                 del client_to_agent[client_id]
             logger.info(f"Client '{client_id}' disconnected.")
+        elif role == "beacon":
+            for aid, (ws, mac) in list(beacons.items()):
+                if ws == websocket:
+                    del beacons[aid]
+                    logger.info(f"Beacon for Agent '{aid}' disconnected.")
+                    break
 
 @app.get("/")
 def read_root():
     return {"status": "ok", "service": "bgrok Signaling Relay"}
+
+@app.post("/wake/{agent_id}")
+async def wake_agent(agent_id: str):
+    if agent_id in beacons:
+        ws, mac = beacons[agent_id]
+        try:
+            # Forward the wake request to the beacon
+            await ws.send_json({"type": "wake", "mac_address": mac})
+            logger.info(f"Forwarded HTTP wake request for Agent '{agent_id}' to active beacon.")
+            return {"status": "ok", "message": "Wake command forwarded to beacon"}
+        except Exception as e:
+            logger.error(f"Failed to forward wake command to beacon for '{agent_id}': {e}")
+            return {"status": "error", "message": f"Failed to reach beacon: {e}"}
+    else:
+        logger.warning(f"Wake requested for Agent '{agent_id}', but no beacon is registered.")
+        return {"status": "error", "message": f"No Wake Beacon registered for agent ID '{agent_id}'"}
 
 def main():
     import argparse

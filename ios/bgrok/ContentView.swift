@@ -25,6 +25,9 @@ struct ContentView: View {
     @State private var lastMouseEventTime: Double = 0
     @State private var accumulatedDelta: CGSize = .zero
     
+    // Keyboard shift state
+    @State private var keyboardHeight: CGFloat = 0
+    
     // Modifier states
     @State private var ctrlActive = false
     @State private var altActive = false
@@ -136,20 +139,33 @@ struct ContentView: View {
                             }
                         }
                         
-                        Button(action: {
-                            let parts = selectedResolution.split(separator: "x").map(String.init)
-                            let w = Int(parts[0]) ?? 1280
-                            let h = Int(parts[1]) ?? 720
-                            webRTC.connect(agentUrlString: agentUrl, width: w, height: h, fps: selectedFps)
-                        }) {
-                            Text("Connect Session")
-                                .fontWeight(.semibold)
-                                .foregroundColor(.white)
-                                .frame(maxWidth: .infinity, minHeight: 44)
-                                .background(
-                                    LinearGradient(colors: [Color.purple, Color.blue], startPoint: .leading, endPoint: .trailing)
-                                )
-                                .cornerRadius(8)
+                        HStack(spacing: 12) {
+                            Button(action: {
+                                let parts = selectedResolution.split(separator: "x").map(String.init)
+                                let w = Int(parts[0]) ?? 1280
+                                let h = Int(parts[1]) ?? 720
+                                webRTC.connect(agentUrlString: agentUrl, width: w, height: h, fps: selectedFps)
+                            }) {
+                                Text("Connect Session")
+                                    .fontWeight(.semibold)
+                                    .foregroundColor(.white)
+                                    .frame(maxWidth: .infinity, minHeight: 44)
+                                    .background(
+                                        LinearGradient(colors: [Color.purple, Color.blue], startPoint: .leading, endPoint: .trailing)
+                                    )
+                                    .cornerRadius(8)
+                            }
+                            
+                            Button(action: {
+                                sendWakeRequest()
+                            }) {
+                                Image(systemName: "power")
+                                    .fontWeight(.bold)
+                                    .foregroundColor(.white)
+                                    .frame(width: 44, height: 44)
+                                    .background(Color.red.opacity(0.85))
+                                    .cornerRadius(8)
+                            }
                         }
                     }
                     .padding()
@@ -165,77 +181,78 @@ struct ContentView: View {
                     ZStack {
                         // Desktop Viewport
                         if let track = webRTC.remoteVideoTrack {
-                            VideoPlayerView(videoTrack: track, scaleMode: scaleMode) { location in
-                                // Handle hover coordinates from Bluetooth mouse
-                                if let norm = getNormalizedCoords(location: location, viewSize: geo.size) {
-                                    webRTC.sendInput(event: ["type": "mouse_move_abs", "x": norm.x, "y": norm.y])
+                            GeometryReader { videoGeo in
+                                VideoPlayerView(videoTrack: track, scaleMode: scaleMode) { location in
+                                    // Handle hover coordinates from Bluetooth mouse
+                                    if let norm = getNormalizedCoords(location: location, viewSize: videoGeo.size) {
+                                        webRTC.sendInput(event: ["type": "mouse_move_abs", "x": norm.x, "y": norm.y])
+                                    }
                                 }
-                            }
-                            .ignoresSafeArea()
-                            .overlay(
-                                Color.clear
-                                    .contentShape(Rectangle())
-                                    .gesture(
-                                        DragGesture(minimumDistance: 0)
-                                            .onChanged { value in
-                                                if inputMode == "Trackpad" {
-                                                    let deltaX = value.translation.width - lastDragTranslation.width
-                                                    let deltaY = value.translation.height - lastDragTranslation.height
-                                                    
-                                                    accumulatedDelta.width += deltaX
-                                                    accumulatedDelta.height += deltaY
-                                                    lastDragTranslation = value.translation
-                                                    
-                                                    let now = Date().timeIntervalSince1970
-                                                    if now - lastMouseEventTime >= 0.022 { // Rate-limit at ~45 FPS to prevent channel congestion
-                                                        webRTC.sendInput(event: [
-                                                            "type": "mouse_move_rel",
-                                                            "dx": accumulatedDelta.width * 1.4,
-                                                            "dy": accumulatedDelta.height * 1.4
-                                                        ])
-                                                        accumulatedDelta = .zero
-                                                        lastMouseEventTime = now
+                                .ignoresSafeArea()
+                                .overlay(
+                                    Color.clear
+                                        .contentShape(Rectangle())
+                                        .gesture(
+                                            DragGesture(minimumDistance: 0)
+                                                .onChanged { value in
+                                                    if inputMode == "Trackpad" {
+                                                        let deltaX = value.translation.width - lastDragTranslation.width
+                                                        let deltaY = value.translation.height - lastDragTranslation.height
+                                                        
+                                                        accumulatedDelta.width += deltaX
+                                                        accumulatedDelta.height += deltaY
+                                                        lastDragTranslation = value.translation
+                                                        
+                                                        let now = Date().timeIntervalSince1970
+                                                        if now - lastMouseEventTime >= 0.022 { // Rate-limit at ~45 FPS to prevent channel congestion
+                                                            webRTC.sendInput(event: [
+                                                                "type": "mouse_move_rel",
+                                                                "dx": accumulatedDelta.width * 1.4,
+                                                                "dy": accumulatedDelta.height * 1.4
+                                                            ])
+                                                            accumulatedDelta = .zero
+                                                            lastMouseEventTime = now
+                                                        }
+                                                    } else {
+                                                        let now = Date().timeIntervalSince1970
+                                                        if now - lastMouseEventTime >= 0.022 {
+                                                            if let norm = getNormalizedCoords(location: value.location, viewSize: videoGeo.size) {
+                                                                webRTC.sendInput(event: ["type": "mouse_move_abs", "x": norm.x, "y": norm.y])
+                                                            }
+                                                            lastMouseEventTime = now
+                                                        }
                                                     }
-                                                } else {
-                                                    let now = Date().timeIntervalSince1970
-                                                    if now - lastMouseEventTime >= 0.022 {
-                                                        if let norm = getNormalizedCoords(location: value.location, viewSize: geo.size) {
+                                                }
+                                                .onEnded { value in
+                                                    if inputMode == "Trackpad" {
+                                                        // Transmit any remaining motion deltas instantly
+                                                        let deltaX = value.translation.width - lastDragTranslation.width
+                                                        let deltaY = value.translation.height - lastDragTranslation.height
+                                                        let finalDx = (accumulatedDelta.width + deltaX) * 1.4
+                                                        let finalDy = (accumulatedDelta.height + deltaY) * 1.4
+                                                        
+                                                        if abs(finalDx) > 0 || abs(finalDy) > 0 {
+                                                            webRTC.sendInput(event: ["type": "mouse_move_rel", "dx": finalDx, "dy": finalDy])
+                                                        }
+                                                        
+                                                        lastDragTranslation = .zero
+                                                        accumulatedDelta = .zero
+                                                    } else {
+                                                        if let norm = getNormalizedCoords(location: value.location, viewSize: videoGeo.size) {
                                                             webRTC.sendInput(event: ["type": "mouse_move_abs", "x": norm.x, "y": norm.y])
                                                         }
-                                                        lastMouseEventTime = now
-                                                    }
-                                                }
-                                            }
-                                            .onEnded { value in
-                                                if inputMode == "Trackpad" {
-                                                    // Transmit any remaining motion deltas instantly
-                                                    let deltaX = value.translation.width - lastDragTranslation.width
-                                                    let deltaY = value.translation.height - lastDragTranslation.height
-                                                    let finalDx = (accumulatedDelta.width + deltaX) * 1.4
-                                                    let finalDy = (accumulatedDelta.height + deltaY) * 1.4
-                                                    
-                                                    if abs(finalDx) > 0 || abs(finalDy) > 0 {
-                                                        webRTC.sendInput(event: ["type": "mouse_move_rel", "dx": finalDx, "dy": finalDy])
-                                                    }
-                                                    
-                                                    lastDragTranslation = .zero
-                                                    accumulatedDelta = .zero
-                                                } else {
-                                                    if let norm = getNormalizedCoords(location: value.location, viewSize: geo.size) {
-                                                        webRTC.sendInput(event: ["type": "mouse_move_abs", "x": norm.x, "y": norm.y])
-                                                    }
-                                                    
-                                                    // Tap-to-click validation (only clicks if the drag was very small, preventing lift-off clicks)
-                                                    let distance = sqrt(value.translation.width * value.translation.width + value.translation.height * value.translation.height)
-                                                    if distance < 8 {
-                                                        webRTC.sendInput(event: ["type": "mouse_button", "button": "left", "state": "down"])
-                                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) {
-                                                            webRTC.sendInput(event: ["type": "mouse_button", "button": "left", "state": "up"])
+                                                        
+                                                        // Tap-to-click validation (only clicks if the drag was very small, preventing lift-off clicks)
+                                                        let distance = sqrt(value.translation.width * value.translation.width + value.translation.height * value.translation.height)
+                                                        if distance < 8 {
+                                                            webRTC.sendInput(event: ["type": "mouse_button", "button": "left", "state": "down"])
+                                                            DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) {
+                                                                webRTC.sendInput(event: ["type": "mouse_button", "button": "left", "state": "up"])
+                                                            }
                                                         }
                                                     }
                                                 }
-                                            }
-                                    )
+                                        )
                                         .simultaneousGesture(
                                             TapGesture()
                                                 .onEnded {
@@ -401,6 +418,18 @@ struct ContentView: View {
                             if isKeyboardFocused {
                                 accessoryKeysBar
                             }
+                        }
+                    }
+                    .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillShowNotification)) { notification in
+                        if let keyboardFrame = notification.userInfo?[UIResponder.keyboardFrameEndUserInfoKey] as? CGRect {
+                            withAnimation(.easeOut(duration: 0.25)) {
+                                keyboardHeight = keyboardFrame.height
+                            }
+                        }
+                    }
+                    .onReceive(NotificationCenter.default.publisher(for: UIResponder.keyboardWillHideNotification)) { _ in
+                        withAnimation(.easeOut(duration: 0.25)) {
+                            keyboardHeight = 0
                         }
                     }
                 }
@@ -791,5 +820,33 @@ struct ContentView: View {
         let yNorm = max(0.0, min(1.0, yRelative / drawHeight))
         
         return CGPoint(x: xNorm, y: yNorm)
+    }
+    
+    private func sendWakeRequest() {
+        // Convert WebSocket/secure schemes to HTTP/HTTPS equivalent
+        var wakeURLString = agentUrl.replacingOccurrences(of: "ws://", with: "http://")
+            .replacingOccurrences(of: "wss://", with: "https://")
+        
+        if !wakeURLString.hasSuffix("/") {
+            wakeURLString += "/"
+        }
+        wakeURLString += "wake/bgrok-laptop-default"
+        
+        guard let url = URL(string: wakeURLString) else {
+            print("Invalid Wake-on-LAN target URL built from: \(agentUrl)")
+            return
+        }
+        
+        var request = URLRequest(url: url)
+        request.httpMethod = "POST"
+        
+        print("Sending Wake-on-LAN trigger to: \(url.absoluteString)")
+        URLSession.shared.dataTask(with: request) { data, response, error in
+            if let error = error {
+                print("Wake-on-LAN request failed: \(error.localizedDescription)")
+            } else if let httpResponse = response as? HTTPURLResponse {
+                print("Wake-on-LAN request completed with code: \(httpResponse.statusCode)")
+            }
+        }.resume()
     }
 }
