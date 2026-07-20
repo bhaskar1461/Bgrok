@@ -1,0 +1,42 @@
+name: Build iOS Client
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  build-ios:
+    name: Build iOS SwiftUI Client
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+
+      - name: Install XcodeGen
+        run: brew install xcodegen
+
+      - name: Generate Xcode Project
+        run: |
+          cd ios
+          xcodegen generate
+
+      - name: Resolve Swift Package Dependencies
+        run: |
+          xcodebuild -project ios/bgrok.xcodeproj \
+                     -scheme bgrok \
+                     -resolvePackageDependencies
+
+      - name: Build iOS App (Simulator)
+        run: |
+          xcodebuild -project ios/bgrok.xcodeproj \
+                     -scheme bgrok \
+                     -sdk iphonesimulator \
+                     -configuration Release \
+                     -destination "generic/platform=iOS Simulator" \
+                     CODE_SIGNING_REQUIRED=NO \
+                     CODE_SIGN_IDENTITY="" \
+                     build

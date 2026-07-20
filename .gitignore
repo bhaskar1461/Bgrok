@@ -1,0 +1,47 @@
+# Rust build artifacts
+/agent-rust/target/
+/agent-rust/Cargo.lock
+
+# Python caching and virtual environments
+**/__pycache__/
+**/*.pyc
+**/*.pyo
+**/*.pyd
+.venv/
+venv/
+ENV/
+env/
+
+# Local security certificates
+*.pem
+/cert.pem
+/key.pem
+/keys/
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Xcode project files (generated dynamically by XcodeGen)
+/ios/bgrok.xcodeproj/
+/ios/bgrok.xcworkspace/
+/ios/DerivedData/
+*.moved-aside
+*.xcworkspace
+!default.mode1v3
+!default.mode2v3
+!default.perspectivev3
+!default.pbxuser
+*.mode1v3
+*.mode2v3
+*.perspectivev3
+*.pbxuser
+
+# IDE configs
+.vscode/
+.idea/
+*.suo
+*.ntvs*
+*.njsproj
+*.sln
+*.sw?

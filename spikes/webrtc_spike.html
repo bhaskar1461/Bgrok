@@ -1,0 +1,972 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>bgrok — WebRTC Latency Spike</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0b0f19;
+            --panel-bg: rgba(17, 25, 40, 0.65);
+            --panel-border: rgba(255, 255, 255, 0.08);
+            --accent-primary: #7c3aed;
+            --accent-primary-glow: rgba(124, 58, 237, 0.4);
+            --accent-secondary: #06b6d4;
+            --accent-secondary-glow: rgba(6, 182, 212, 0.4);
+            --text-main: #f3f4f6;
+            --text-muted: #9ca3af;
+            --success: #10b981;
+            --error: #ef4444;
+            --font-display: 'Outfit', sans-serif;
+            --font-body: 'Inter', sans-serif;
+            --font-mono: 'JetBrains Mono', monospace;
+        }
+
+        * {
+            box-sizing: border-box;
+            margin: 0;
+            padding: 0;
+        }
+
+        body {
+            background-color: var(--bg-color);
+            color: var(--text-main);
+            font-family: var(--font-body);
+            min-height: 100vh;
+            overflow-x: hidden;
+            display: flex;
+            flex-direction: column;
+            background-image: 
+                radial-gradient(at 10% 20%, rgba(124, 58, 237, 0.15) 0px, transparent 50%),
+                radial-gradient(at 90% 80%, rgba(6, 182, 212, 0.15) 0px, transparent 50%);
+        }
+
+        header {
+            padding: 1.5rem 2rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            border-bottom: 1px solid var(--panel-border);
+            background: rgba(11, 15, 25, 0.8);
+            backdrop-filter: blur(12px);
+            z-index: 10;
+        }
+
+        .logo {
+            font-family: var(--font-display);
+            font-size: 1.75rem;
+            font-weight: 800;
+            background: linear-gradient(135deg, #a78bfa 0%, #22d3ee 100%);
+            -webkit-background-clip: text;
+            background-clip: text;
+            -webkit-text-fill-color: transparent;
+            letter-spacing: -0.05em;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .logo span {
+            font-size: 0.8rem;
+            font-weight: 600;
+            padding: 0.2rem 0.5rem;
+            border: 1px solid var(--accent-secondary);
+            border-radius: 9999px;
+            color: var(--accent-secondary);
+            font-family: var(--font-body);
+            letter-spacing: normal;
+        }
+
+        .container {
+            max-width: 1400px;
+            width: 100%;
+            margin: 0 auto;
+            padding: 2rem;
+            display: grid;
+            grid-template-columns: 350px 1fr;
+            gap: 2rem;
+            flex: 1;
+        }
+
+        /* Glassmorphic Panel */
+        .panel {
+            background: var(--panel-bg);
+            border: 1px solid var(--panel-border);
+            border-radius: 16px;
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            padding: 1.5rem;
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+            box-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.3);
+            transition: border-color 0.3s ease, box-shadow 0.3s ease;
+        }
+
+        .panel:hover {
+            border-color: rgba(255, 255, 255, 0.12);
+        }
+
+        .panel-title {
+            font-family: var(--font-display);
+            font-size: 1.25rem;
+            font-weight: 600;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+            padding-bottom: 0.75rem;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        /* Buttons */
+        .btn-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        button {
+            width: 100%;
+            padding: 0.75rem 1rem;
+            border-radius: 8px;
+            border: none;
+            font-family: var(--font-body);
+            font-weight: 600;
+            font-size: 0.95rem;
+            cursor: pointer;
+            transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, var(--accent-primary) 0%, #6d28d9 100%);
+            color: white;
+            box-shadow: 0 4px 14px var(--accent-primary-glow);
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px var(--accent-primary-glow);
+        }
+
+        .btn-secondary {
+            background: linear-gradient(135deg, var(--accent-secondary) 0%, #0891b2 100%);
+            color: white;
+            box-shadow: 0 4px 14px var(--accent-secondary-glow);
+        }
+
+        .btn-secondary:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 6px 20px var(--accent-secondary-glow);
+        }
+
+        .btn-outline {
+            background: transparent;
+            border: 1px solid var(--panel-border);
+            color: var(--text-main);
+        }
+
+        .btn-outline:hover {
+            background: rgba(255, 255, 255, 0.05);
+            border-color: rgba(255, 255, 255, 0.2);
+        }
+
+        button:disabled {
+            opacity: 0.4;
+            cursor: not-allowed;
+            transform: none !important;
+            box-shadow: none !important;
+        }
+
+        /* Live Clock & Canvas */
+        .clock-container {
+            text-align: center;
+            padding: 1rem;
+            background: rgba(0, 0, 0, 0.2);
+            border-radius: 12px;
+            border: 1px solid rgba(255, 255, 255, 0.03);
+        }
+
+        #clock-canvas {
+            width: 100%;
+            height: 80px;
+            border-radius: 8px;
+            background: #000;
+        }
+
+        /* Status & Stats */
+        .status-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+            padding: 0.25rem 0.6rem;
+            border-radius: 9999px;
+            font-size: 0.75rem;
+            font-weight: 600;
+            text-transform: uppercase;
+        }
+
+        .status-disconnected {
+            background: rgba(239, 68, 68, 0.15);
+            color: var(--error);
+        }
+
+        .status-connecting {
+            background: rgba(245, 158, 11, 0.15);
+            color: #f59e0b;
+        }
+
+        .status-connected {
+            background: rgba(16, 185, 129, 0.15);
+            color: var(--success);
+        }
+
+        .stat-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 0.75rem;
+        }
+
+        .stat-card {
+            background: rgba(0, 0, 0, 0.15);
+            padding: 0.75rem;
+            border-radius: 8px;
+            border: 1px solid rgba(255, 255, 255, 0.02);
+        }
+
+        .stat-label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+            margin-bottom: 0.25rem;
+        }
+
+        .stat-value {
+            font-family: var(--font-mono);
+            font-size: 1.1rem;
+            font-weight: 700;
+        }
+
+        /* Terminal Logging */
+        .terminal {
+            background: #05070c;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+            border-radius: 12px;
+            font-family: var(--font-mono);
+            font-size: 0.8rem;
+            padding: 1rem;
+            height: 180px;
+            overflow-y: auto;
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+            scroll-behavior: smooth;
+        }
+
+        .log-entry {
+            line-height: 1.4;
+        }
+
+        .log-info { color: var(--text-muted); }
+        .log-success { color: var(--success); }
+        .log-warn { color: #f59e0b; }
+        .log-error { color: var(--error); }
+
+        /* Main Workspace Display */
+        .workspace {
+            display: flex;
+            flex-direction: column;
+            gap: 1.5rem;
+        }
+
+        .video-container {
+            display: grid;
+            grid-template-rows: auto 1fr;
+            gap: 1rem;
+            flex: 1;
+        }
+
+        .video-box {
+            position: relative;
+            background: #000;
+            border-radius: 16px;
+            border: 1px solid var(--panel-border);
+            overflow: hidden;
+            aspect-ratio: 16/9;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
+        }
+
+        video {
+            width: 100%;
+            height: 100%;
+            object-fit: contain;
+        }
+
+        .video-watermark {
+            position: absolute;
+            top: 1rem;
+            left: 1rem;
+            background: rgba(0, 0, 0, 0.7);
+            backdrop-filter: blur(8px);
+            padding: 0.4rem 0.8rem;
+            border-radius: 6px;
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            font-size: 0.8rem;
+            display: flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        /* Mode Switcher */
+        .mode-tabs {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            background: rgba(0, 0, 0, 0.3);
+            border-radius: 8px;
+            padding: 0.25rem;
+            border: 1px solid rgba(255, 255, 255, 0.05);
+        }
+
+        .mode-tab {
+            padding: 0.5rem;
+            border-radius: 6px;
+            text-align: center;
+            font-size: 0.85rem;
+            cursor: pointer;
+            font-weight: 500;
+            transition: all 0.2s ease;
+        }
+
+        .mode-tab.active {
+            background: var(--accent-primary);
+            color: white;
+            box-shadow: 0 2px 8px var(--accent-primary-glow);
+        }
+
+        /* Latency Meter visual overlay */
+        .latency-meter-overlay {
+            position: absolute;
+            bottom: 1rem;
+            right: 1rem;
+            background: rgba(11, 15, 25, 0.85);
+            backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 0.75rem 1rem;
+            border-radius: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 0.25rem;
+        }
+
+        .latency-meter-overlay .val {
+            font-family: var(--font-mono);
+            font-size: 1.4rem;
+            font-weight: 700;
+            color: var(--accent-secondary);
+        }
+
+        .signaling-panel {
+            background: rgba(0, 0, 0, 0.25);
+            border-radius: 12px;
+            padding: 1rem;
+            border: 1px solid rgba(255, 255, 255, 0.03);
+            display: none;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .signaling-panel.active {
+            display: flex;
+        }
+
+        .input-group {
+            display: flex;
+            flex-direction: column;
+            gap: 0.4rem;
+        }
+
+        .input-group label {
+            font-size: 0.75rem;
+            color: var(--text-muted);
+        }
+
+        .input-group input {
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px solid var(--panel-border);
+            color: white;
+            padding: 0.5rem;
+            border-radius: 6px;
+            font-family: var(--font-mono);
+            font-size: 0.85rem;
+        }
+
+        .input-group input:focus {
+            outline: none;
+            border-color: var(--accent-primary);
+        }
+    </style>
+</head>
+<body>
+
+    <header>
+        <div class="logo">bgrok <span>WebRTC Latency Spike</span></div>
+        <div>
+            <span id="conn-state-badge" class="status-badge status-disconnected">Disconnected</span>
+        </div>
+    </header>
+
+    <div class="container">
+        <!-- Sidebar Controls -->
+        <div class="panel">
+            <div class="panel-title">
+                Configuration
+            </div>
+
+            <div class="mode-tabs">
+                <div id="tab-loopback" class="mode-tab active" onclick="switchMode('loopback')">Loopback</div>
+                <div id="tab-crosstab" class="mode-tab" onclick="switchMode('crosstab')">Cross-Tab</div>
+            </div>
+
+            <!-- Loopback Controls -->
+            <div id="loopback-controls" class="btn-group">
+                <button id="btn-start-loopback" class="btn-primary" onclick="startLoopback()">
+                    Start Loopback Share
+                </button>
+                <button id="btn-stop-loopback" class="btn-outline" onclick="stopConnections()" disabled>
+                    Stop Share
+                </button>
+            </div>
+
+            <!-- Cross-Tab Controls -->
+            <div id="crosstab-controls" class="signaling-panel">
+                <div class="input-group">
+                    <label for="room-id">Sync Session ID</label>
+                    <input type="text" id="room-id" value="bgrok-spike-default">
+                </div>
+                <div class="btn-group" style="margin-top: 0.5rem;">
+                    <button id="btn-crosstab-host" class="btn-primary" onclick="startCrossTabHost()">
+                        Host Screen
+                    </button>
+                    <button id="btn-crosstab-join" class="btn-secondary" onclick="startCrossTabJoin()">
+                        Receive Stream
+                    </button>
+                    <button id="btn-stop-crosstab" class="btn-outline" onclick="stopConnections()" disabled>
+                        Stop Session
+                    </button>
+                </div>
+            </div>
+
+            <!-- Diagnostic Clock Canvas -->
+            <div class="clock-container">
+                <div class="stat-label" style="margin-bottom: 0.5rem;">Local High-Precision Source</div>
+                <canvas id="clock-canvas"></canvas>
+            </div>
+
+            <!-- Performance Stats -->
+            <div>
+                <div class="panel-title" style="font-size: 1rem; border: none; padding: 0; margin-bottom: 0.75rem;">
+                    Metrics
+                </div>
+                <div class="stat-grid">
+                    <div class="stat-card">
+                        <div class="stat-label">Data RTT</div>
+                        <div id="stat-rtt" class="stat-value">--</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Video FPS</div>
+                        <div id="stat-fps" class="stat-value">--</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Bitrate</div>
+                        <div id="stat-bitrate" class="stat-value">--</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Packets Lost</div>
+                        <div id="stat-lost" class="stat-value">--</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Log Output -->
+            <div>
+                <div class="panel-title" style="font-size: 1rem; border: none; padding: 0; margin-bottom: 0.5rem;">
+                    WebRTC Logs
+                </div>
+                <div id="terminal" class="terminal"></div>
+            </div>
+        </div>
+
+        <!-- Main Workspace (Video) -->
+        <div class="workspace">
+            <div class="video-container">
+                <div class="panel-title" style="border: none; padding: 0;">
+                    Remote Desk Viewport
+                </div>
+                <div class="video-box">
+                    <div class="video-watermark">
+                        <span style="display:inline-block; width: 8px; height: 8px; background: var(--accent-secondary); border-radius: 50%;"></span>
+                        WebRTC Encrypted Stream
+                    </div>
+                    
+                    <video id="remote-video" autoplay playsinline muted></video>
+
+                    <!-- Latency Meter Overlay -->
+                    <div class="latency-meter-overlay">
+                        <div class="stat-label">Data Channel Latency</div>
+                        <div id="overlay-rtt" class="val">0.0 ms</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // High Precision Timer Canvas
+        const clockCanvas = document.getElementById("clock-canvas");
+        const ctx = clockCanvas.getContext("2d");
+        
+        function resizeCanvas() {
+            clockCanvas.width = clockCanvas.offsetWidth * window.devicePixelRatio;
+            clockCanvas.height = clockCanvas.offsetHeight * window.devicePixelRatio;
+            ctx.scale(window.devicePixelRatio, window.devicePixelRatio);
+        }
+        window.addEventListener('resize', resizeCanvas);
+        resizeCanvas();
+
+        function drawClock() {
+            const width = clockCanvas.offsetWidth;
+            const height = clockCanvas.offsetHeight;
+            
+            ctx.fillStyle = "#090d16";
+            ctx.fillRect(0, 0, width, height);
+
+            const now = new Date();
+            const ms = now.getMilliseconds().toString().padStart(3, '0');
+            const h = now.getHours().toString().padStart(2, '0');
+            const m = now.getMinutes().toString().padStart(2, '0');
+            const s = now.getSeconds().toString().padStart(2, '0');
+            
+            ctx.fillStyle = "#fff";
+            ctx.font = "bold 20px 'JetBrains Mono'";
+            ctx.textAlign = "center";
+            ctx.textBaseline = "middle";
+            ctx.fillText(`${h}:${m}:${s}.${ms}`, width / 2, height / 2);
+            
+            requestAnimationFrame(drawClock);
+        }
+        drawClock();
+
+        // WebRTC variables
+        let localPeer = null;
+        let remotePeer = null;
+        let localStream = null;
+        let pingIntervalId = null;
+        let statsIntervalId = null;
+        let activeMode = 'loopback';
+        let currentRole = null; // 'host' or 'client'
+
+        // Logging utility
+        const terminal = document.getElementById("terminal");
+        function log(message, type = 'info') {
+            const entry = document.createElement("div");
+            entry.className = `log-entry log-${type}`;
+            const time = new Date().toLocaleTimeString();
+            entry.innerText = `[${time}] ${message}`;
+            terminal.appendChild(entry);
+            terminal.scrollTop = terminal.scrollHeight;
+        }
+
+        function updateStateBadge(state) {
+            const badge = document.getElementById("conn-state-badge");
+            badge.className = "status-badge";
+            if (state === "disconnected" || state === "failed") {
+                badge.classList.add("status-disconnected");
+                badge.innerText = state;
+            } else if (state === "connecting" || state === "checking") {
+                badge.classList.add("status-connecting");
+                badge.innerText = state;
+            } else if (state === "connected") {
+                badge.classList.add("status-connected");
+                badge.innerText = state;
+            }
+        }
+
+        function switchMode(mode) {
+            if (localStream || localPeer || remotePeer) {
+                if (!confirm("Switching modes will disconnect current session. Proceed?")) return;
+                stopConnections();
+            }
+            activeMode = mode;
+            document.getElementById("tab-loopback").className = mode === 'loopback' ? "mode-tab active" : "mode-tab";
+            document.getElementById("tab-crosstab").className = mode === 'crosstab' ? "mode-tab active" : "mode-tab";
+            
+            document.getElementById("loopback-controls").style.display = mode === 'loopback' ? "flex" : "none";
+            document.getElementById("crosstab-controls").className = mode === 'crosstab' ? "signaling-panel active" : "signaling-panel";
+            log(`Switched to ${mode} mode`);
+        }
+
+        // Disable and Enable buttons
+        function toggleButtons(running) {
+            document.getElementById("btn-start-loopback").disabled = running;
+            document.getElementById("btn-stop-loopback").disabled = !running;
+            document.getElementById("btn-crosstab-host").disabled = running;
+            document.getElementById("btn-crosstab-join").disabled = running;
+            document.getElementById("btn-stop-crosstab").disabled = !running;
+            document.getElementById("room-id").disabled = running;
+        }
+
+        // WebRTC Loopback Setup
+        async function startLoopback() {
+            log("Starting same-tab loopback share...", "info");
+            try {
+                // 1. Get Screen Capture
+                localStream = await navigator.mediaDevices.getDisplayMedia({
+                    video: {
+                        cursor: "always",
+                        frameRate: { ideal: 60, max: 60 }
+                    },
+                    audio: false
+                });
+                log("Screen sharing permission granted", "success");
+
+                toggleButtons(true);
+                updateStateBadge("connecting");
+
+                // 2. Setup RTCPeerConnections
+                localPeer = new RTCPeerConnection({
+                    iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+                });
+                remotePeer = new RTCPeerConnection({
+                    iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+                });
+
+                // Attach Video Tracks
+                localStream.getTracks().forEach(track => localPeer.addTrack(track, localStream));
+                log("Attached video track to local connection");
+
+                // Remote handling
+                remotePeer.ontrack = (event) => {
+                    log("Remote connection received track", "success");
+                    document.getElementById("remote-video").srcObject = event.streams[0];
+                };
+
+                // ICE Candidate exchange
+                localPeer.onicecandidate = (e) => {
+                    if (e.candidate) remotePeer.addIceCandidate(e.candidate);
+                };
+                remotePeer.onicecandidate = (e) => {
+                    if (e.candidate) localPeer.addIceCandidate(e.candidate);
+                };
+
+                // Data Channel for Latency Ping-Pong
+                const sendChannel = localPeer.createDataChannel("latency-ping");
+                
+                remotePeer.ondatachannel = (e) => {
+                    const receiveChannel = e.channel;
+                    receiveChannel.onmessage = (msg) => {
+                        // Echo message back immediately
+                        receiveChannel.send(msg.data);
+                    };
+                };
+
+                // Connect Data Channel
+                sendChannel.onopen = () => {
+                    log("Data channel opened", "success");
+                    startPingPong(sendChannel);
+                };
+
+                // Monitor connection state
+                localPeer.onconnectionstatechange = () => {
+                    log(`Connection state: ${localPeer.connectionState}`);
+                    updateStateBadge(localPeer.connectionState);
+                };
+
+                // 3. Negotiate SDP
+                const offer = await localPeer.createOffer();
+                await localPeer.setLocalDescription(offer);
+                await remotePeer.setRemoteDescription(offer);
+
+                const answer = await remotePeer.createAnswer();
+                await remotePeer.setLocalDescription(answer);
+                await localPeer.setRemoteDescription(answer);
+
+                startStatsMonitor(remotePeer);
+
+            } catch (err) {
+                log(`Failed to initiate loopback: ${err.message}`, "error");
+                stopConnections();
+            }
+        }
+
+        // Cross-tab LocalStorage Signaling
+        let syncIntervalId = null;
+
+        function getRoomKey(type) {
+            const roomId = document.getElementById("room-id").value.trim();
+            return `bgrok_crosstab_${roomId}_${type}`;
+        }
+
+        async function startCrossTabHost() {
+            currentRole = 'host';
+            log("Initializing Cross-Tab Host...", "info");
+            try {
+                // Clear old keys
+                localStorage.removeItem(getRoomKey("offer"));
+                localStorage.removeItem(getRoomKey("answer"));
+                localStorage.removeItem(getRoomKey("host_ice"));
+                localStorage.removeItem(getRoomKey("client_ice"));
+
+                localStream = await navigator.mediaDevices.getDisplayMedia({
+                    video: { cursor: "always", frameRate: { ideal: 60 } },
+                    audio: false
+                });
+                log("Screen capture ready", "success");
+                toggleButtons(true);
+                updateStateBadge("connecting");
+
+                localPeer = new RTCPeerConnection({
+                    iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+                });
+
+                localStream.getTracks().forEach(track => localPeer.addTrack(track, localStream));
+
+                // Gather host candidates and write to LocalStorage
+                const hostIce = [];
+                localPeer.onicecandidate = (e) => {
+                    if (e.candidate) {
+                        hostIce.push(e.candidate);
+                        localStorage.setItem(getRoomKey("host_ice"), JSON.stringify(hostIce));
+                    }
+                };
+
+                // Setup Data Channel
+                const sendChannel = localPeer.createDataChannel("latency-ping");
+                sendChannel.onopen = () => {
+                    log("Data channel opened with client", "success");
+                    startPingPong(sendChannel);
+                };
+
+                localPeer.onconnectionstatechange = () => {
+                    log(`Host connection state: ${localPeer.connectionState}`);
+                    updateStateBadge(localPeer.connectionState);
+                };
+
+                // Create SDP Offer
+                const offer = await localPeer.createOffer();
+                await localPeer.setLocalDescription(offer);
+                localStorage.setItem(getRoomKey("offer"), JSON.stringify(offer));
+                log("Offered SDP registered in LocalStorage. Waiting for client to join...", "warn");
+
+                // Poll for SDP Answer
+                syncIntervalId = setInterval(async () => {
+                    const answerStr = localStorage.getItem(getRoomKey("answer"));
+                    if (answerStr) {
+                        clearInterval(syncIntervalId);
+                        syncIntervalId = null;
+                        const answer = JSON.parse(answerStr);
+                        log("Client joined! Setting remote SDP Answer...");
+                        await localPeer.setRemoteDescription(answer);
+
+                        // Read Client ICE candidates
+                        const clientIceStr = localStorage.getItem(getRoomKey("client_ice"));
+                        if (clientIceStr) {
+                            const candidates = JSON.parse(clientIceStr);
+                            candidates.forEach(c => localPeer.addIceCandidate(new RTCIceCandidate(c)));
+                            log("Loaded client ICE candidates");
+                        }
+                    }
+                }, 1000);
+
+            } catch (err) {
+                log(`Failed to start host: ${err.message}`, "error");
+                stopConnections();
+            }
+        }
+
+        async function startCrossTabJoin() {
+            currentRole = 'client';
+            log("Initializing Cross-Tab Client...", "info");
+            try {
+                toggleButtons(true);
+                updateStateBadge("connecting");
+
+                // Read Offer
+                const offerStr = localStorage.getItem(getRoomKey("offer"));
+                if (!offerStr) {
+                    throw new Error("No active Host session found on this ID. Make sure the Host tab is open and sharing.");
+                }
+                const offer = JSON.parse(offerStr);
+
+                remotePeer = new RTCPeerConnection({
+                    iceServers: [{ urls: "stun:stun.l.google.com:19302" }]
+                });
+
+                remotePeer.ontrack = (event) => {
+                    log("Received video stream from Host", "success");
+                    document.getElementById("remote-video").srcObject = event.streams[0];
+                };
+
+                // Data channel listener
+                remotePeer.ondatachannel = (e) => {
+                    const receiveChannel = e.channel;
+                    receiveChannel.onmessage = (msg) => {
+                        receiveChannel.send(msg.data); // echo
+                    };
+                    log("Client DataChannel established with Host");
+                };
+
+                const clientIce = [];
+                remotePeer.onicecandidate = (e) => {
+                    if (e.candidate) {
+                        clientIce.push(e.candidate);
+                        localStorage.setItem(getRoomKey("client_ice"), JSON.stringify(clientIce));
+                    }
+                };
+
+                remotePeer.onconnectionstatechange = () => {
+                    log(`Client connection state: ${remotePeer.connectionState}`);
+                    updateStateBadge(remotePeer.connectionState);
+                };
+
+                // Set Remote Offer
+                await remotePeer.setRemoteDescription(offer);
+
+                // Create SDP Answer
+                const answer = await remotePeer.createAnswer();
+                await remotePeer.setLocalDescription(answer);
+                localStorage.setItem(getRoomKey("answer"), JSON.stringify(answer));
+                log("SDP Answer registered. Exchanging ICE...");
+
+                // Read Host ICE candidates
+                const hostIceStr = localStorage.getItem(getRoomKey("host_ice"));
+                if (hostIceStr) {
+                    const candidates = JSON.parse(hostIceStr);
+                    candidates.forEach(c => remotePeer.addIceCandidate(new RTCIceCandidate(c)));
+                    log("Loaded host ICE candidates");
+                }
+
+                startStatsMonitor(remotePeer);
+
+            } catch (err) {
+                log(`Failed to join: ${err.message}`, "error");
+                stopConnections();
+            }
+        }
+
+        // Ping-pong latency tracker
+        function startPingPong(channel) {
+            if (pingIntervalId) clearInterval(pingIntervalId);
+            
+            channel.onmessage = (event) => {
+                const sendTime = parseFloat(event.data);
+                const rtt = performance.now() - sendTime;
+                
+                // RTT displays round trip. One-way latency is roughly RTT / 2.
+                const oneWay = (rtt / 2).toFixed(1);
+                
+                document.getElementById("stat-rtt").innerText = `${oneWay} ms`;
+                document.getElementById("overlay-rtt").innerText = `${oneWay} ms`;
+            };
+
+            pingIntervalId = setInterval(() => {
+                if (channel.readyState === "open") {
+                    channel.send(performance.now().toString());
+                }
+            }, 100); // 10 pings per second
+        }
+
+        // WebRTC statistics reporter
+        let prevBytesReceived = 0;
+        let prevTimestamp = 0;
+
+        function startStatsMonitor(pc) {
+            if (statsIntervalId) clearInterval(statsIntervalId);
+            
+            statsIntervalId = setInterval(async () => {
+                if (!pc || pc.connectionState !== "connected") return;
+                
+                const stats = await pc.getStats();
+                stats.forEach(report => {
+                    if (report.type === "inbound-rtp" && report.kind === "video") {
+                        // FPS
+                        if (report.framesPerSecond) {
+                            document.getElementById("stat-fps").innerText = report.framesPerSecond;
+                        }
+                        
+                        // Bitrate computation
+                        const now = report.timestamp;
+                        const bytes = report.bytesReceived;
+                        if (prevTimestamp > 0) {
+                            const kbps = ((bytes - prevBytesReceived) * 8) / (now - prevTimestamp);
+                            const mbps = (kbps / 1000).toFixed(2);
+                            document.getElementById("stat-bitrate").innerText = `${mbps} Mbps`;
+                        }
+                        prevBytesReceived = bytes;
+                        prevTimestamp = now;
+
+                        // Packet loss
+                        if (report.packetsLost !== undefined) {
+                            document.getElementById("stat-lost").innerText = report.packetsLost;
+                            if (report.packetsLost > 0) {
+                                document.getElementById("stat-lost").style.color = "var(--error)";
+                            }
+                        }
+                    }
+                });
+            }, 1000);
+        }
+
+        // Teardown connections
+        function stopConnections() {
+            log("Stopping all active feeds and connections...", "warn");
+            
+            if (pingIntervalId) { clearInterval(pingIntervalId); pingIntervalId = null; }
+            if (statsIntervalId) { clearInterval(statsIntervalId); statsIntervalId = null; }
+            if (syncIntervalId) { clearInterval(syncIntervalId); syncIntervalId = null; }
+
+            if (localStream) {
+                localStream.getTracks().forEach(track => track.stop());
+                localStream = null;
+            }
+
+            if (localPeer) {
+                localPeer.close();
+                localPeer = null;
+            }
+
+            if (remotePeer) {
+                remotePeer.close();
+                remotePeer = null;
+            }
+
+            document.getElementById("remote-video").srcObject = null;
+            document.getElementById("stat-rtt").innerText = "--";
+            document.getElementById("stat-fps").innerText = "--";
+            document.getElementById("stat-bitrate").innerText = "--";
+            document.getElementById("stat-lost").innerText = "--";
+            document.getElementById("stat-lost").style.color = "var(--text-main)";
+            document.getElementById("overlay-rtt").innerText = "0.0 ms";
+            
+            toggleButtons(false);
+            updateStateBadge("disconnected");
+            currentRole = null;
+            
+            // Clean up crosstab localStorage keys
+            if (activeMode === 'crosstab') {
+                localStorage.removeItem(getRoomKey("offer"));
+                localStorage.removeItem(getRoomKey("answer"));
+                localStorage.removeItem(getRoomKey("host_ice"));
+                localStorage.removeItem(getRoomKey("client_ice"));
+            }
+        }
+    </script>
+</body>
+</html>

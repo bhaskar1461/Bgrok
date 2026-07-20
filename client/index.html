@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>bgrok — Desktop Remote Viewer</title>
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="bgrok">
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Outfit:wght@400;600;800&family=JetBrains+Mono:wght@400;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="index.css">
+</head>
+<body>
+
+    <header>
+        <div style="display:flex;align-items:center;gap:0.75rem">
+            <button id="btn-toggle-panel" class="key-btn" style="width:auto;min-width:36px;min-height:36px;padding:0.3rem 0.6rem;font-size:1.1rem;line-height:1" title="Toggle Settings Panel">☰</button>
+            <div class="logo">bgrok <span>Remote Desk</span></div>
+        </div>
+        <div class="nav-metrics">
+            <span id="latency-indicator" class="metric-pill">
+                <span class="dot yellow"></span>
+                RTT: --
+            </span>
+            <span id="conn-state-badge" class="status-badge status-disconnected">Disconnected</span>
+        </div>
+    </header>
+
+    <div class="container">
+        <!-- Sidebar Panel -->
+        <div class="panel">
+            <div class="panel-section">
+                <div class="section-title">Relay Connection</div>
+                <div class="input-group">
+                    <label for="relay-url">Relay Server URL</label>
+                    <input type="text" id="relay-url" value="wss://bgrok.cc.cd:8765/ws" placeholder="wss://bgrok.cc.cd:8765/ws">
+                </div>
+                <div class="input-group">
+                    <label for="agent-id">Target Agent ID</label>
+                    <input type="text" id="agent-id" value="bgrok-laptop-default" placeholder="bgrok-laptop-default">
+                </div>
+                
+                <div class="input-grid">
+                    <div class="input-group">
+                        <label for="stream-res">Resolution</label>
+                        <select id="stream-res">
+                            <option value="1280x720" selected>1280x720 (HD)</option>
+                            <option value="1920x1080">1920x1080 (FHD)</option>
+                            <option value="960x540">960x540 (Compact)</option>
+                        </select>
+                    </div>
+                    <div class="input-group">
+                        <label for="stream-fps">Target FPS</label>
+                        <select id="stream-fps">
+                            <option value="30" selected>30 FPS</option>
+                            <option value="60">60 FPS</option>
+                            <option value="15">15 FPS (Eco)</option>
+                        </select>
+                    </div>
+                </div>
+
+                <div class="btn-group" style="margin-top: 0.5rem;">
+                    <button id="btn-connect" class="btn-primary">Connect Session</button>
+                    <button id="btn-disconnect" class="btn-outline" disabled>Disconnect</button>
+                </div>
+            </div>
+
+            <div class="panel-section" id="pairing-section">
+                <div class="section-title">Device Pairing</div>
+                <div class="input-group">
+                    <label for="pair-code">6-Digit Pairing Code</label>
+                    <input type="text" id="pair-code" placeholder="Enter code from agent">
+                </div>
+                <div class="btn-group" style="margin-top: 0.25rem;">
+                    <button id="btn-pair" class="btn-secondary">Pair iPhone Client</button>
+                </div>
+            </div>
+
+            <div class="panel-section">
+                <div class="section-title">Input Controls</div>
+                <div class="mode-tabs">
+                    <div id="tab-direct" class="mode-tab active">Direct Touch</div>
+                    <div id="tab-trackpad" class="mode-tab">Trackpad</div>
+                </div>
+                
+                <div id="trackpad-area" class="trackpad-surface hidden">
+                    <div class="trackpad-label">Relative Trackpad Surface</div>
+                    <div class="trackpad-sublabel">Drag to move cursor. Tap = Left Click. 2-Finger Tap = Right Click.</div>
+                </div>
+            </div>
+
+            <div class="panel-section flex-expand">
+                <div class="section-title">Session Stats</div>
+                <div class="stat-grid">
+                    <div class="stat-card">
+                        <div class="stat-label">Framerate</div>
+                        <div id="stat-fps" class="stat-value">--</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Data Latency</div>
+                        <div id="stat-rtt" class="stat-value">--</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Bandwidth</div>
+                        <div id="stat-bitrate" class="stat-value">--</div>
+                    </div>
+                    <div class="stat-card">
+                        <div class="stat-label">Packets Lost</div>
+                        <div id="stat-lost" class="stat-value">--</div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="panel-section">
+                <div class="section-title">System Logs</div>
+                <div id="terminal" class="terminal"></div>
+            </div>
+        </div>
+
+        <!-- Viewport Container -->
+        <div class="viewport-container">
+            <div class="viewport-box" id="viewport-box">
+                <div id="connection-overlay" class="viewport-overlay">
+                    <div class="overlay-spinner"></div>
+                    <div class="overlay-title">Awaiting Connection</div>
+                    <div class="overlay-text">Input the agent local IP address and click Connect to start streaming.</div>
+                </div>
+                
+                <video id="remote-video" autoplay playsinline></video>
+            </div>
+
+            <!-- Accessory Key Bar -->
+            <div class="accessory-bar">
+                <button class="key-btn" data-vk="17">Ctrl</button>
+                <button class="key-btn" data-vk="18">Alt</button>
+                <button class="key-btn" data-vk="16">Shift</button>
+                <button class="key-btn" data-vk="91">Win</button>
+                <button class="key-btn" data-vk="27">Esc</button>
+                <button class="key-btn" data-vk="9">Tab</button>
+                <button class="key-btn" data-vk="46">Delete</button>
+                <button class="key-btn special-combo" id="btn-cad">Ctrl+Alt+Del</button>
+                <button class="key-btn key-toggle-active" id="btn-keyboard-grab">Keyboard Grab</button>
+                <button class="key-btn" id="btn-keyboard-toggle">Keyboard</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Hidden input to trap native keyboard typing on mobile devices -->
+    <input type="text" id="hidden-keyboard-input" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" style="position: absolute; left: -9999px; top: -9999px; opacity: 0; width: 1px; height: 1px;">
+
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/elliptic/6.5.4/elliptic.min.js"></script>
+    <script src="index.js?v=3"></script>
+</body>
+</html>

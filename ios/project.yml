@@ -1,0 +1,30 @@
+name: bgrok
+options:
+  bundleIdPrefix: cc.cd
+  deploymentTarget:
+    iOS: "15.0"
+
+packages:
+  WebRTC:
+    url: https://github.com/alexpiezo/WebRTC.git
+    from: 1.1.0
+
+targets:
+  bgrok:
+    type: application
+    platform: iOS
+    sources:
+      - path: bgrok
+    info:
+      properties:
+        NSLocalNetworkUsageDescription: "bgrok needs access to the local network to find and connect to your computer agent."
+        NSBonjourServices:
+          - "_http._tcp"
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: cd.cc.bgrok
+        SWIFT_VERSION: "5.9"
+    dependencies:
+      - package: WebRTC
