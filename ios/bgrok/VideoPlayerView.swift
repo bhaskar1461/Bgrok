@@ -4,6 +4,7 @@ import WebRTC
 struct VideoPlayerView: UIViewRepresentable {
     /// The WebRTC video track to render
     let videoTrack: RTCVideoTrack?
+    let scaleMode: UIView.ContentMode
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
@@ -11,12 +12,15 @@ struct VideoPlayerView: UIViewRepresentable {
 
     func makeUIView(context: Context) -> RTCMTLVideoView {
         let metalView = RTCMTLVideoView()
-        // scaleAspectFit maintains desktop aspect ratio with black bars as needed
-        metalView.videoContentMode = .scaleAspectFit
+        metalView.videoContentMode = scaleMode
         return metalView
     }
 
     func updateUIView(_ uiView: RTCMTLVideoView, context: Context) {
+        if uiView.videoContentMode != scaleMode {
+            uiView.videoContentMode = scaleMode
+        }
+        
         // Track changes to prevent redundant listeners and leaks
         if context.coordinator.currentTrack != videoTrack {
             // Remove view renderer from previous track if it exists
