@@ -5,6 +5,7 @@ struct VideoPlayerView: UIViewRepresentable {
     /// The WebRTC video track to render
     let videoTrack: RTCVideoTrack?
     let scaleMode: UIView.ContentMode
+    let onMouseMove: (CGPoint) -> Void
 
     func makeCoordinator() -> Coordinator {
         Coordinator()
@@ -13,6 +14,13 @@ struct VideoPlayerView: UIViewRepresentable {
     func makeUIView(context: Context) -> RTCMTLVideoView {
         let metalView = RTCMTLVideoView()
         metalView.videoContentMode = scaleMode
+        
+        let hoverGesture = UIHoverGestureRecognizer(
+            target: context.coordinator, 
+            action: #selector(Coordinator.handleHover(_:))
+        )
+        metalView.addGestureRecognizer(hoverGesture)
+        
         return metalView
     }
 
@@ -20,6 +28,8 @@ struct VideoPlayerView: UIViewRepresentable {
         if uiView.videoContentMode != scaleMode {
             uiView.videoContentMode = scaleMode
         }
+        
+        context.coordinator.onMouseMove = onMouseMove
         
         // Track changes to prevent redundant listeners and leaks
         if context.coordinator.currentTrack != videoTrack {
@@ -43,8 +53,17 @@ struct VideoPlayerView: UIViewRepresentable {
         }
     }
 
-    class Coordinator {
+    class Coordinator: NSObject {
         var currentTrack: RTCVideoTrack?
+        var onMouseMove: ((CGPoint) -> Void)?
+        
+        @objc func handleHover(_ gesture: UIHoverGestureRecognizer) {
+            guard let view = gesture.view, let onMouseMove = onMouseMove else { return }
+            let location = gesture.location(in: view)
+            if gesture.state == .changed || gesture.state == .began {
+                onMouseMove(location)
+            }
+        }
     }
 }
 

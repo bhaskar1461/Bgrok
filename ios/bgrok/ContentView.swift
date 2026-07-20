@@ -163,39 +163,44 @@ struct ContentView: View {
                     ZStack {
                         // Desktop Viewport
                         if let track = webRTC.remoteVideoTrack {
-                            VideoPlayerView(videoTrack: track, scaleMode: scaleMode)
-                                .ignoresSafeArea()
-                                .overlay(
-                                    Color.clear
-                                        .contentShape(Rectangle())
-                                        .gesture(
-                                            DragGesture(minimumDistance: 0)
-                                                .onChanged { value in
-                                                    if inputMode == "Trackpad" {
-                                                        let deltaX = (value.translation.width - lastDragTranslation.width) * 1.4
-                                                        let deltaY = (value.translation.height - lastDragTranslation.height) * 1.4
-                                                        webRTC.sendInput(event: ["type": "mouse_move_rel", "dx": deltaX, "dy": deltaY])
-                                                        lastDragTranslation = value.translation
-                                                    } else {
-                                                        let xNorm = value.location.x / geo.size.width
-                                                        let yNorm = value.location.y / geo.size.height
-                                                        webRTC.sendInput(event: ["type": "mouse_move_abs", "x": xNorm, "y": yNorm])
+                            VideoPlayerView(videoTrack: track, scaleMode: scaleMode) { location in
+                                // Handle hover coordinates from Bluetooth mouse
+                                if let norm = getNormalizedCoords(location: location, viewSize: geo.size) {
+                                    webRTC.sendInput(event: ["type": "mouse_move_abs", "x": norm.x, "y": norm.y])
+                                }
+                            }
+                            .ignoresSafeArea()
+                            .overlay(
+                                Color.clear
+                                    .contentShape(Rectangle())
+                                    .gesture(
+                                        DragGesture(minimumDistance: 0)
+                                            .onChanged { value in
+                                                if inputMode == "Trackpad" {
+                                                    let deltaX = (value.translation.width - lastDragTranslation.width) * 1.4
+                                                    let deltaY = (value.translation.height - lastDragTranslation.height) * 1.4
+                                                    webRTC.sendInput(event: ["type": "mouse_move_rel", "dx": deltaX, "dy": deltaY])
+                                                    lastDragTranslation = value.translation
+                                                } else {
+                                                    if let norm = getNormalizedCoords(location: value.location, viewSize: geo.size) {
+                                                        webRTC.sendInput(event: ["type": "mouse_move_abs", "x": norm.x, "y": norm.y])
                                                     }
                                                 }
-                                                .onEnded { value in
-                                                    if inputMode == "Trackpad" {
-                                                        lastDragTranslation = .zero
-                                                    } else {
-                                                        let xNorm = value.location.x / geo.size.width
-                                                        let yNorm = value.location.y / geo.size.height
-                                                        webRTC.sendInput(event: ["type": "mouse_move_abs", "x": xNorm, "y": yNorm])
-                                                        webRTC.sendInput(event: ["type": "mouse_button", "button": "left", "state": "down"])
-                                                        DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) {
-                                                            webRTC.sendInput(event: ["type": "mouse_button", "button": "left", "state": "up"])
-                                                        }
+                                            }
+                                            .onEnded { value in
+                                                if inputMode == "Trackpad" {
+                                                    lastDragTranslation = .zero
+                                                } else {
+                                                    if let norm = getNormalizedCoords(location: value.location, viewSize: geo.size) {
+                                                        webRTC.sendInput(event: ["type": "mouse_move_abs", "x": norm.x, "y": norm.y])
+                                                    }
+                                                    webRTC.sendInput(event: ["type": "mouse_button", "button": "left", "state": "down"])
+                                                    DispatchQueue.main.asyncAfter(deadline: .now() + 0.03) {
+                                                        webRTC.sendInput(event: ["type": "mouse_button", "button": "left", "state": "up"])
                                                     }
                                                 }
-                                        )
+                                            }
+                                    )
                                         .simultaneousGesture(
                                             TapGesture()
                                                 .onEnded {
@@ -262,13 +267,12 @@ struct ContentView: View {
                         // Edge Swipe Zones
                         HStack {
                             // Left swipe zone
-                            Color.clear
-                                .frame(width: 25)
-                                .contentShape(Rectangle())
-                                .gesture(
+                            Color.black.opacity(0.001)
+                                .frame(width: 40)
+                                .highPriorityGesture(
                                     DragGesture(minimumDistance: 10)
                                         .onChanged { value in
-                                            if value.translation.width > 20 {
+                                            if value.translation.width > 15 {
                                                 withAnimation(.spring()) {
                                                     sideMenuSide = .leading
                                                     showSideMenu = true
@@ -280,13 +284,12 @@ struct ContentView: View {
                             Spacer()
                             
                             // Right swipe zone
-                            Color.clear
-                                .frame(width: 25)
-                                .contentShape(Rectangle())
-                                .gesture(
+                            Color.black.opacity(0.001)
+                                .frame(width: 40)
+                                .highPriorityGesture(
                                     DragGesture(minimumDistance: 10)
                                         .onChanged { value in
-                                            if value.translation.width < -20 {
+                                            if value.translation.width < -15 {
                                                 withAnimation(.spring()) {
                                                     sideMenuSide = .trailing
                                                     showSideMenu = true
@@ -711,5 +714,47 @@ struct ContentView: View {
             webRTC.sendInput(event: ["type": "key", "vk": 18, "state": "up"])
             webRTC.sendInput(event: ["type": "key", "vk": 17, "state": "up"])
         }
+    }
+    
+    private func getNormalizedCoords(location: CGPoint, viewSize: CGSize) -> CGPoint? {
+        let parts = selectedResolution.split(separator: "x").map(String.init)
+        let videoW = CGFloat(Double(parts[0]) ?? 1280.0)
+        let videoH = CGFloat(Double(parts[1]) ?? 720.0)
+        
+        let viewAspect = viewSize.width / viewSize.height
+        let videoAspect = videoW / videoH
+        
+        var drawWidth = viewSize.width
+        var drawHeight = viewSize.height
+        var xOffset: CGFloat = 0
+        var yOffset: CGFloat = 0
+        
+        if scaleMode == .scaleAspectFill {
+            // Aspect Fill: Video fills the screen, potentially cropped
+            if videoAspect > viewAspect {
+                drawWidth = viewSize.height * videoAspect
+                xOffset = (viewSize.width - drawWidth) / 2
+            } else {
+                drawHeight = viewSize.width / videoAspect
+                yOffset = (viewSize.height - drawHeight) / 2
+            }
+        } else {
+            // Aspect Fit: Video is fully visible with letterboxing/pillarboxing
+            if videoAspect > viewAspect {
+                drawHeight = viewSize.width / videoAspect
+                yOffset = (viewSize.height - drawHeight) / 2
+            } else {
+                drawWidth = viewSize.height * videoAspect
+                xOffset = (viewSize.width - drawWidth) / 2
+            }
+        }
+        
+        let xRelative = location.x - xOffset
+        let yRelative = location.y - yOffset
+        
+        let xNorm = max(0.0, min(1.0, xRelative / drawWidth))
+        let yNorm = max(0.0, min(1.0, yRelative / drawHeight))
+        
+        return CGPoint(x: xNorm, y: yNorm)
     }
 }
