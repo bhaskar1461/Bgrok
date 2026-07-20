@@ -201,7 +201,23 @@ async def handle_http_offer(payload):
         answer = await pc.createAnswer()
         await pc.setLocalDescription(answer)
         
-        logger.info("Successfully generated and applied WebRTC Answer for HTTP client.")
+        # Wait for local ICE gathering to complete so candidates are embedded in the SDP answer
+        gathering_complete = asyncio.Event()
+        
+        @pc.on("icegatheringstatechange")
+        def on_icegatheringstatechange():
+            logger.info(f"Local ICE gathering state changed to: {pc.iceGatheringState}")
+            if pc.iceGatheringState == "complete":
+                gathering_complete.set()
+                
+        try:
+            if pc.iceGatheringState != "complete":
+                logger.info("Waiting for ICE gathering to complete...")
+                await asyncio.wait_for(gathering_complete.wait(), timeout=1.5)
+        except asyncio.TimeoutError:
+            logger.warning("ICE gathering timed out after 1.5s. Returning current SDP answer.")
+        
+        logger.info("Successfully generated and applied WebRTC Answer with gathered candidates.")
         return {
             "sdp": pc.localDescription.sdp,
             "type": pc.localDescription.type

@@ -84,14 +84,18 @@ class WebRTCManager: NSObject, ObservableObject {
                     return
                 }
                 
-                // Perform HTTP Signaling exchange with the Agent
-                self.sendOfferToAgent(
-                    agentUrl: agentUrl, 
-                    sdp: localSdp.sdp, 
-                    width: width, 
-                    height: height, 
-                    fps: fps
-                )
+                // Wait 1.0 second for ICE candidates to be gathered before sending offer
+                DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self] in
+                    guard let self = self, let localSdpWithCandidates = self.peerConnection?.localDescription else { return }
+                    
+                    self.sendOfferToAgent(
+                        agentUrl: agentUrl, 
+                        sdp: localSdpWithCandidates.sdp, 
+                        width: width, 
+                        height: height, 
+                        fps: fps
+                    )
+                }
             }
         }
     }
