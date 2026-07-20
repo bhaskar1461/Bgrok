@@ -1,11 +1,14 @@
 import SwiftUI
 import WebRTC
+import Network
+import Combine
 
 struct ContentView: View {
     @StateObject private var webRTC = WebRTCManager()
     
     // Connection Settings
-    @State private var agentUrl: String = "wss://bgrok.cc.cd:8765/ws"
+    @AppStorage("agentUrl") private var agentUrl: String = "http://192.168.0.3:8080"
+    @AppStorage("targetMac") private var targetMac: String = "00:00:00:00:00:00"
     @State private var selectedResolution = "1280x720"
     @State private var selectedFps = 30
     
@@ -96,6 +99,19 @@ struct ContentView: View {
                                     .foregroundColor(.gray)
                                 TextField("http://192.168.1.XX:8080", text: $agentUrl)
                                     .keyboardType(.URL)
+                                    .autocorrectionDisabled()
+                                    .textInputAutocapitalization(.never)
+                                    .padding(10)
+                                    .background(Color.black.opacity(0.3))
+                                    .cornerRadius(8)
+                                    .foregroundColor(.white)
+                            }
+                            
+                            VStack(alignment: .leading, spacing: 4) {
+                                Text("Target MAC Address (For local Wake-on-LAN)")
+                                    .font(.caption)
+                                    .foregroundColor(.gray)
+                                TextField("00:11:22:33:44:55", text: $targetMac)
                                     .autocorrectionDisabled()
                                     .textInputAutocapitalization(.never)
                                     .padding(10)
@@ -276,6 +292,8 @@ struct ContentView: View {
                                                 }
                                         )
                                 )
+                            }
+                            .padding(.bottom, keyboardHeight)
                         } else {
                             VStack(spacing: 12) {
                                 ProgressView()
@@ -823,7 +841,49 @@ struct ContentView: View {
     }
     
     private func sendWakeRequest() {
-        // Convert WebSocket/secure schemes to HTTP/HTTPS equivalent
+        // 1. Send Local Wake-on-LAN UDP Broadcast directly from the iPhone on local Wi-Fi
+        let cleanMac = targetMac.replacingOccurrences(of: ":", with: "")
+                                .replacingOccurrences(of: "-", with: "")
+        if cleanMac.count == 12 {
+            var packet = Data(repeating: 0xFF, count: 6)
+            var macBytes = [UInt8]()
+            var index = cleanMac.startIndex
+            while index < cleanMac.endIndex {
+                let nextIndex = cleanMac.index(index, offsetBy: 2)
+                if let byte = UInt8(cleanMac[index..<nextIndex], radix: 16) {
+                    macBytes.append(byte)
+                }
+                index = nextIndex
+            }
+            for _ in 0..<16 {
+                packet.append(contentsOf: macBytes)
+            }
+            
+            let connection = NWConnection(host: "255.255.255.255", port: 9, using: .udp)
+            connection.stateUpdateHandler = { state in
+                switch state {
+                case .ready:
+                    connection.send(content: packet, completion: .contentProcessed({ error in
+                        if let error = error {
+                            print("Local Wake-on-LAN Broadcast failed: \(error)")
+                        } else {
+                            print("Local Wake-on-LAN Broadcast sent successfully to \(targetMac)!")
+                        }
+                        connection.cancel()
+                    }))
+                case .failed(let error):
+                    print("Local Wake-on-LAN connection failed: \(error)")
+                    connection.cancel()
+                default:
+                    break
+                }
+            }
+            connection.start(queue: .global())
+        } else {
+            print("Skipping local WoL: targetMac is empty or invalid (\(targetMac))")
+        }
+
+        // 2. Also forward to Relay Server wake endpoint if it exists
         var wakeURLString = agentUrl.replacingOccurrences(of: "ws://", with: "http://")
             .replacingOccurrences(of: "wss://", with: "https://")
         
@@ -832,21 +892,18 @@ struct ContentView: View {
         }
         wakeURLString += "wake/bgrok-laptop-default"
         
-        guard let url = URL(string: wakeURLString) else {
-            print("Invalid Wake-on-LAN target URL built from: \(agentUrl)")
-            return
+        if let url = URL(string: wakeURLString) {
+            var request = URLRequest(url: url)
+            request.httpMethod = "POST"
+            
+            print("Sending Wake-on-LAN trigger to Relay at: \(url.absoluteString)")
+            URLSession.shared.dataTask(with: request) { data, response, error in
+                if let error = error {
+                    print("Relay Wake-on-LAN request failed: \(error.localizedDescription)")
+                } else if let httpResponse = response as? HTTPURLResponse {
+                    print("Relay Wake-on-LAN completed with code: \(httpResponse.statusCode)")
+                }
+            }.resume()
         }
-        
-        var request = URLRequest(url: url)
-        request.httpMethod = "POST"
-        
-        print("Sending Wake-on-LAN trigger to: \(url.absoluteString)")
-        URLSession.shared.dataTask(with: request) { data, response, error in
-            if let error = error {
-                print("Wake-on-LAN request failed: \(error.localizedDescription)")
-            } else if let httpResponse = response as? HTTPURLResponse {
-                print("Wake-on-LAN request completed with code: \(httpResponse.statusCode)")
-            }
-        }.resume()
     }
 }
