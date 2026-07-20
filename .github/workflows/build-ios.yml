@@ -11,6 +11,8 @@ jobs:
   build-ios:
     name: Build iOS SwiftUI Client
     runs-on: macos-14
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_15.4.app/Contents/Developer
 
     steps:
       - name: Checkout Repository
