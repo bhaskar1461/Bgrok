@@ -159,7 +159,7 @@ class WebRTCManager: NSObject, ObservableObject {
         }
         
         let buffer = RTCDataBuffer(data: jsonData, isBinary: false)
-        channel.send(buffer)
+        channel.sendData(buffer)
     }
     
     func disconnect() {
@@ -191,9 +191,16 @@ class WebRTCManager: NSObject, ObservableObject {
         self.peerConnection?.statistics { [weak self] (report) in
             guard let self = self else { return }
             for (_, stat) in report.statistics {
-                if stat.type == "candidate-pair" && stat.values["state"] == "succeeded" {
-                    if let rttString = stat.values["currentRoundTripTime"],
-                       let rttSeconds = Double(rttString) {
+                if stat.type == "candidate-pair" && (stat.values["state"] as? String) == "succeeded" {
+                    if let rttValue = stat.values["currentRoundTripTime"] {
+                        let rttSeconds: Double
+                        if let num = rttValue as? NSNumber {
+                            rttSeconds = num.doubleValue
+                        } else if let str = rttValue as? String, let val = Double(str) {
+                            rttSeconds = val
+                        } else {
+                            continue
+                        }
                         DispatchQueue.main.async {
                             self.rttMs = String(format: "%.1f ms", rttSeconds * 1000)
                         }
