@@ -1,0 +1,49 @@
+Command line invocation:
+    /Applications/Xcode_16.2.app/Contents/Developer/usr/bin/xcodebuild -project ios/bgrok.xcodeproj -scheme bgrok -sdk iphoneos -configuration Release -destination generic/platform=iOS CODE_SIGNING_ALLOWED=YES CODE_SIGNING_REQUIRED=YES CODE_SIGN_IDENTITY=- SYMROOT=/Users/runner/work/Bgrok/Bgrok/build build
+
+User defaults from command line:
+    IDEPackageSupportUseBuiltinSCM = YES
+
+Build settings from command line:
+    CODE_SIGN_IDENTITY = -
+    CODE_SIGNING_ALLOWED = YES
+    CODE_SIGNING_REQUIRED = YES
+    SDKROOT = iphoneos18.2
+    SYMROOT = /Users/runner/work/Bgrok/Bgrok/build
+
+Resolve Package Graph
+
+
+Resolved source packages:
+  WebRTC: https://github.com/alexpiezo/WebRTC.git @ 1.1.31567
+
+Prepare packages
+
+note: Using codesigning identity override: -
+ComputeTargetDependencyGraph
+note: Building targets in dependency order
+note: Target dependency graph (2 targets)
+    Target 'bgrok' in project 'bgrok'
+        ➜ Explicit dependency on target 'WebRTC' in project 'WebRTC'
+    Target 'WebRTC' in project 'WebRTC' (no dependencies)
+
+GatherProvisioningInputs
+
+CreateBuildDescription
+
+ExecuteExternalTool /Applications/Xcode_16.2.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/swiftc --version
+
+ExecuteExternalTool /Applications/Xcode_16.2.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/clang -v -E -dM -isysroot /Applications/Xcode_16.2.app/Contents/Developer/Platforms/iPhoneOS.platform/Developer/SDKs/iPhoneOS18.2.sdk -x c -c /dev/null
+
+ExecuteExternalTool /Applications/Xcode_16.2.app/Contents/Developer/Toolchains/XcodeDefault.xctoolchain/usr/bin/ld -version_details
+
+Build description signature: 3fda8aa451afe58b805fc7a27b188876
+Build description path: /Users/runner/Library/Developer/Xcode/DerivedData/bgrok-esnazavnfezvkrbxukbxxdxwmlzp/Build/Intermediates.noindex/XCBuildData/3fda8aa451afe58b805fc7a27b188876.xcbuilddata
+error: Ad Hoc code signing is not allowed with SDK 'iOS 18.2'. (in target 'bgrok' from project 'bgrok')
+note: Disabling previews because SWIFT_VERSION is set and SWIFT_OPTIMIZATION_LEVEL=-O, expected -Onone (in target 'bgrok' from project 'bgrok')
+** BUILD FAILED **
+
+
+The following build commands failed:
+	Building project bgrok with scheme bgrok and configuration Release
+(1 failure)
