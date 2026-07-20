@@ -48,9 +48,12 @@ jobs:
                      -sdk iphoneos \
                      -configuration Release \
                      -destination "generic/platform=iOS" \
-                     CODE_SIGNING_ALLOWED=YES \
-                     CODE_SIGNING_REQUIRED=YES \
-                     CODE_SIGN_IDENTITY="-" \
+                     "CODE_SIGNING_ALLOWED[sdk=iphoneos*]=YES" \
+                     "CODE_SIGNING_REQUIRED[sdk=iphoneos*]=YES" \
+                     "CODE_SIGN_IDENTITY[sdk=iphoneos*]=-" \
+                     "CODE_SIGNING_ALLOWED[sdk=macosx*]=NO" \
+                     "CODE_SIGNING_REQUIRED[sdk=macosx*]=NO" \
+                     "CODE_SIGN_IDENTITY[sdk=macosx*]=" \
                      SYMROOT=$(pwd)/build \
                      build > build_log.txt 2>&1 || (cat build_log.txt && exit 1)
 
