@@ -127,6 +127,21 @@ class ScreenCaptureTrack(VideoStreamTrack):
             f"Streaming {target_width}x{target_height} @ {fps} FPS"
         )
 
+    def _process_frame(self, bgr):
+        # Convert BGRA -> RGB
+        rgb = cv2.cvtColor(bgr, cv2.COLOR_BGRA2RGB)
+
+        # Resize to target dimensions
+        h, w = rgb.shape[:2]
+        if w != self.target_width or h != self.target_height:
+            rgb = cv2.resize(
+                rgb,
+                (self.target_width, self.target_height),
+                interpolation=cv2.INTER_AREA,
+            )
+
+        return VideoFrame.from_ndarray(rgb, format="rgb24")
+
     async def recv(self):
         pts, time_base = await self.next_timestamp()
 
@@ -142,19 +157,10 @@ class ScreenCaptureTrack(VideoStreamTrack):
             if bgr is None:
                 raise RuntimeError("No frame available from WGC")
 
-            # Convert BGRA -> RGB
-            rgb = cv2.cvtColor(bgr, cv2.COLOR_BGRA2RGB)
-
-            # Resize to target dimensions
-            h, w = rgb.shape[:2]
-            if w != self.target_width or h != self.target_height:
-                rgb = cv2.resize(
-                    rgb,
-                    (self.target_width, self.target_height),
-                    interpolation=cv2.INTER_AREA,
-                )
-
-            frame = VideoFrame.from_ndarray(rgb, format="rgb24")
+            # Offload heavy CPU operations to background thread to prevent event loop starvation
+            loop = asyncio.get_event_loop()
+            frame = await loop.run_in_executor(None, self._process_frame, bgr)
+            
             frame.pts = pts
             frame.time_base = time_base
 

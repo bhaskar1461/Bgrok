@@ -171,7 +171,7 @@ struct ContentView: View {
                                     webRTC.sendInput(event: ["type": "mouse_move_abs", "x": norm.x, "y": norm.y])
                                 }
                             }
-                            .ignoresSafeArea(.all, edges: isKeyboardFocused ? .top : .all)
+                            .ignoresSafeArea()
                             .overlay(
                                 Color.clear
                                     .contentShape(Rectangle())
@@ -404,7 +404,7 @@ struct ContentView: View {
                         }
                     }
                 }
-                .ignoresSafeArea(.all, edges: isKeyboardFocused ? .top : .all)
+                .ignoresSafeArea()
             }
         }
     }
