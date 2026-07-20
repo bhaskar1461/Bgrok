@@ -38,13 +38,28 @@ jobs:
                      -scheme bgrok \
                      -resolvePackageDependencies
 
-      - name: Build iOS App (Simulator)
+      - name: Build iOS App (Physical Device)
         run: |
           xcodebuild -project ios/bgrok.xcodeproj \
                      -scheme bgrok \
-                     -sdk iphonesimulator \
+                     -sdk iphoneos \
                      -configuration Release \
-                     -destination "generic/platform=iOS Simulator" \
+                     -destination "generic/platform=iOS" \
+                     CODE_SIGNING_ALLOWED=NO \
                      CODE_SIGNING_REQUIRED=NO \
                      CODE_SIGN_IDENTITY="" \
+                     PROVISIONING_PROFILE_REQUIRED=NO \
+                     SYMROOT=$(pwd)/build \
                      build
+
+      - name: Create IPA Package
+        run: |
+          mkdir Payload
+          cp -r build/Release-iphoneos/bgrok.app Payload/
+          zip -r bgrok.ipa Payload
+
+      - name: Upload IPA Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: bgrok-ios-app
+          path: bgrok.ipa
