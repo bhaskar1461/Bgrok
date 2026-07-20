@@ -28,6 +28,12 @@ def main():
         help="Unique Agent identity string (default: bgrok-laptop-default)"
     )
     parser.add_argument(
+        "--port", 
+        type=int, 
+        default=8080, 
+        help="Local HTTP signaling port for direct connection (default: 8080)"
+    )
+    parser.add_argument(
         "--verbose", 
         action="store_true", 
         help="Enable detailed debug-level diagnostics logs"
@@ -53,17 +59,18 @@ def main():
     logger.info("==================================================")
     logger.info(f"Identity Agent ID  : {args.agent_id}")
     logger.info(f"Relay Server URL   : {args.relay_url}")
+    logger.info(f"Local HTTP Port    : {args.port}")
     logger.info("")
     logger.info("   -------------------------------------------")
     logger.info(f"   >>> ACTIVE PAIRING CODE: {pairing_code} <<<")
     logger.info("   -------------------------------------------")
     logger.info("")
     logger.info("Keep this code open to pair your phone client.")
-    logger.info("Outbound WebSockets signaling tunnel active.")
+    logger.info("Outbound WebSockets signaling tunnel active and HTTP direct offer server running.")
     logger.info("==================================================")
     
     try:
-        asyncio.run(start_signaling_loop(args.relay_url, args.agent_id, pairing_code))
+        asyncio.run(start_signaling_loop(args.relay_url, args.agent_id, pairing_code, args.port))
     except KeyboardInterrupt:
         logger.info("Shutdown requested. Stopping bgrok agent...")
 

@@ -149,13 +149,100 @@ async def handle_pairing_request(data, current_pairing_code, websocket):
         "status": "approved"
     }))
 
-async def start_signaling_loop(relay_url, agent_id, pairing_code):
+async def handle_http_offer(payload):
+    global active_pc
+    try:
+        sdp = payload.get("sdp")
+        sdp_type = payload.get("type")
+        
+        if not sdp or not sdp_type:
+            logger.error("HTTP signaling offer is missing fields.")
+            return {"error": "Missing sdp or type"}
+
+        logger.info("Received HTTP WebRTC offer. Preparing direct peer connection...")
+        
+        # Teardown existing session
+        await close_active_pc()
+
+        # Configure Peer Connection
+        pc = RTCPeerConnection()
+        active_pc = pc
+
+        # Attach Screen Stream Video Track
+        fps = int(payload.get("fps", 30))
+        width = int(payload.get("width", 1280))
+        height = int(payload.get("height", 720))
+        
+        video_track = ScreenCaptureTrack(fps=fps, target_width=width, target_height=height)
+        pc.addTrack(video_track)
+
+        # Attach Data Channel Input callbacks
+        @pc.on("datachannel")
+        def on_datachannel(channel):
+            logger.info(f"Inputs Data Channel '{channel.label}' established via HTTP signaling.")
+            @channel.on("message")
+            def on_message(message):
+                try:
+                    event_data = json.loads(message)
+                    injector.process_event(event_data)
+                except Exception as ex:
+                    logger.error(f"Error handling inputs message: {ex}")
+
+        @pc.on("connectionstatechange")
+        async def on_connectionstatechange():
+            logger.info(f"HTTP-Signaled WebRTC Connection State: {pc.connectionState}")
+            if pc.connectionState in ["failed", "closed"]:
+                await close_active_pc()
+
+        # Negotiation
+        offer_desc = RTCSessionDescription(sdp=sdp, type=sdp_type)
+        await pc.setRemoteDescription(offer_desc)
+        
+        answer = await pc.createAnswer()
+        await pc.setLocalDescription(answer)
+        
+        logger.info("Successfully generated and applied WebRTC Answer for HTTP client.")
+        return {
+            "sdp": pc.localDescription.sdp,
+            "type": pc.localDescription.type
+        }
+    except Exception as e:
+        logger.error(f"Error during HTTP WebRTC offer handling: {e}", exc_info=True)
+        return {"error": str(e)}
+
+async def start_signaling_loop(relay_url, agent_id, pairing_code, local_port=8080):
     """
     Outbound WebSocket connection to the Relay. Listens for signaling & pairing events.
+    Also hosts a local HTTP server on local_port for direct client-to-agent signaling.
     """
     global websocket_client
     import ssl
+    from fastapi import FastAPI, Request
+    from fastapi.middleware.cors import CORSMiddleware
+    import uvicorn
+
+    # Initialize and start local HTTP signaling server concurrently
+    app = FastAPI(title="bgrok Local Agent Signaling")
     
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=["*"],
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
+
+    @app.post("/offer")
+    async def http_offer(request: Request):
+        payload = await request.json()
+        result = await handle_http_offer(payload)
+        return result
+
+    config = uvicorn.Config(app, host="0.0.0.0", port=local_port, log_level="warning")
+    server = uvicorn.Server(config)
+    asyncio.create_task(server.serve())
+    logger.info(f"Local HTTP signaling server listening on http://0.0.0.0:{local_port}")
+
     logger.info(f"Connecting to Relay server at {relay_url}...")
     
     while True:
