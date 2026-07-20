@@ -58,8 +58,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error + Send + Sync>> {
     ScreenCapture::start()?;
     let injector = Arc::new(InputInjector::new());
 
-    // Connect to signaling relay (with self-signed cert support)
-    let relay_url = "wss://bgrok.cc.cd:8765/ws";
+    // Check if a relay URL is passed as a command-line argument, fallback to production default
+    let args: Vec<String> = std::env::args().collect();
+    let relay_url = if args.len() > 1 {
+        &args[1]
+    } else {
+        "wss://bgrok.cc.cd:8765/ws"
+    };
     let agent_id = "bgrok-laptop-default";
     println!("Connecting to Signaling Relay at: {}", relay_url);
 

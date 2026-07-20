@@ -40,7 +40,7 @@ if use_rust:
         print("Compiling agent-rust...")
         subprocess.run(["cargo", "build", "--manifest-path", os.path.join(project_root, "agent-rust", "Cargo.toml")])
     agent = subprocess.Popen(
-        [rust_agent_path],
+        [rust_agent_path, "wss://localhost:8765/ws"],
         cwd=os.path.join(project_root, "agent-rust")
     )
 else:
