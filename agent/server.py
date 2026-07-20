@@ -286,7 +286,8 @@ async def start_signaling_loop(relay_url, agent_id, pairing_code, local_port=808
                         pass
                         
         except (websockets.exceptions.ConnectionClosed, ConnectionRefusedError) as e:
-            logger.warning(f"Relay connection disconnected/refused: {e}. Retrying in 5 seconds...")
+            # Quietly notify about relay status without spamming loud warnings
+            logger.info(f"Relay offline or refused connection (Retrying in background). Local HTTP server on port {local_port} is active.")
             await close_active_pc()
             await asyncio.sleep(5)
         except Exception as e:
