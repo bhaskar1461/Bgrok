@@ -16,6 +16,7 @@ targets:
     sources:
       - path: bgrok
     info:
+      path: bgrok/Info.plist
       properties:
         NSLocalNetworkUsageDescription: "bgrok needs access to the local network to find and connect to your computer agent."
         NSBonjourServices:
